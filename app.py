@@ -1,4 +1,4 @@
-from forgeqc import create_app
+from forgeqc_quote_bom import create_app
 
 app = create_app()
 
