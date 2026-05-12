@@ -9,10 +9,15 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      PYTHONUNBUFFERED: '1'
 
     steps:
       - name: Check out repository
@@ -29,4 +34,4 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run ForgeQC smoke test
-        run: python smoke_test.py
+        run: python -u smoke_test.py
