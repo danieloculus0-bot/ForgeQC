@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local database and runtime files
+data/forgeqc.db
+data/*.db
+instance/
+
+# Proprietary/private company data
+# Do not commit real RMA trackers, customer lists, defect logs, exports, or imported workbooks.
+data/imports/*.xlsx
+data/imports/*.xlsm
+data/imports/*.xls
+data/exports/*
+!data/imports/README.md
+!data/exports/README.md
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
