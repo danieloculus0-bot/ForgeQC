@@ -46,7 +46,7 @@ http://127.0.0.1:5000
 python smoke_test.py
 ```
 
-The smoke test verifies imports, database table creation, required routes, and core GET pages.
+The smoke test verifies imports, database table creation, required routes, and core GET pages. GitHub Actions also runs this check for pull requests.
 
 ## Privacy and public repo rules
 
