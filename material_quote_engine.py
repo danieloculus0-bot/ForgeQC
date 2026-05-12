@@ -1,6 +1,8 @@
 import math
 from datetime import datetime
 
+from flask import request
+
 from forgeqc_app import db, page, log, as_float, as_int
 
 
