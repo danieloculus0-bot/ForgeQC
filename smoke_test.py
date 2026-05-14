@@ -33,6 +33,8 @@ def main():
             'deviation_request',
             'nonconformance_record',
             'corrective_action',
+            'metric_snapshot',
+            'quality_signal',
         }
         missing = required_tables - table_names
         check(not missing, f'Missing tables: {sorted(missing)}')
@@ -40,6 +42,9 @@ def main():
         rules = {str(rule.rule) for rule in app.url_map.iter_rules()}
         required_routes = {
             '/',
+            '/pulse',
+            '/pulse/snapshot',
+            '/pulse/export.csv',
             '/quoting',
             '/quoting/<int:quote_id>',
             '/bom/<int:upload_id>',
@@ -67,6 +72,8 @@ def main():
     client = app.test_client()
     for path in [
         '/',
+        '/pulse',
+        '/pulse/export.csv',
         '/quoting',
         '/materials',
         '/workorders',
@@ -82,7 +89,10 @@ def main():
         response = client.get(path)
         check(response.status_code == 200, f'{path} returned {response.status_code}')
 
-    print('ForgeQC smoke test passed: imports, tables, routes, and core GET pages are alive.')
+    response = client.post('/pulse/snapshot')
+    check(response.status_code in (302, 303), f'/pulse/snapshot returned {response.status_code}')
+
+    print('ForgeQC smoke test passed: imports, tables, routes, pulse intelligence, and core pages are alive.')
 
 
 if __name__ == '__main__':
