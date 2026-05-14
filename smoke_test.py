@@ -35,6 +35,7 @@ def main():
             'corrective_action',
             'metric_snapshot',
             'quality_signal',
+            'five_why_analysis',
         }
         missing = required_tables - table_names
         check(not missing, f'Missing tables: {sorted(missing)}')
@@ -45,6 +46,9 @@ def main():
             '/pulse',
             '/pulse/snapshot',
             '/pulse/export.csv',
+            '/capa-assistant',
+            '/five-whys',
+            '/five-whys/<int:row_id>',
             '/quoting',
             '/quoting/<int:quote_id>',
             '/bom/<int:upload_id>',
@@ -74,6 +78,8 @@ def main():
         '/',
         '/pulse',
         '/pulse/export.csv',
+        '/capa-assistant',
+        '/five-whys',
         '/quoting',
         '/materials',
         '/workorders',
@@ -92,7 +98,21 @@ def main():
     response = client.post('/pulse/snapshot')
     check(response.status_code in (302, 303), f'/pulse/snapshot returned {response.status_code}')
 
-    print('ForgeQC smoke test passed: imports, tables, routes, pulse intelligence, and core pages are alive.')
+    response = client.post('/five-whys', data={
+        'analysis_number': 'WHY-SMOKE-0001',
+        'status': 'Draft',
+        'source_type': 'Internal',
+        'problem_statement': 'Sample smoke-test problem statement for missing hardware on a controlled part.',
+        'why_1': 'The hardware was missing at final inspection.',
+        'why_2': 'The install step was not verified before moving to the next operation.',
+        'why_3': 'The traveler did not include a defined verification point.',
+        'why_4': 'The process relied on memory instead of a control point.',
+        'why_5': 'The system did not identify the hardware as a critical verification item.',
+        'final_root_cause': 'The process lacked a controlled verification point for required hardware installation.',
+    })
+    check(response.status_code in (302, 303), f'/five-whys POST returned {response.status_code}')
+
+    print('ForgeQC smoke test passed: imports, tables, routes, pulse intelligence, CAPA assistant, and core pages are alive.')
 
 
 if __name__ == '__main__':
