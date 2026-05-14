@@ -30,6 +30,9 @@ def main():
             'material_catalog_item',
             'material_purchase_history',
             'quote_material_assignment',
+            'deviation_request',
+            'nonconformance_record',
+            'corrective_action',
         }
         missing = required_tables - table_names
         check(not missing, f'Missing tables: {sorted(missing)}')
@@ -50,12 +53,32 @@ def main():
             '/metrics',
             '/morale',
             '/admin',
+            '/quality-forms',
+            '/deviations',
+            '/deviations/<int:row_id>',
+            '/ncr-dmr',
+            '/ncr-dmr/<int:row_id>',
+            '/corrective-actions',
+            '/corrective-actions/<int:row_id>',
         }
         missing_routes = required_routes - rules
         check(not missing_routes, f'Missing routes: {sorted(missing_routes)}')
 
     client = app.test_client()
-    for path in ['/', '/quoting', '/materials', '/workorders', '/planning', '/metrics', '/morale', '/admin']:
+    for path in [
+        '/',
+        '/quoting',
+        '/materials',
+        '/workorders',
+        '/planning',
+        '/metrics',
+        '/morale',
+        '/admin',
+        '/quality-forms',
+        '/deviations',
+        '/ncr-dmr',
+        '/corrective-actions',
+    ]:
         response = client.get(path)
         check(response.status_code == 200, f'{path} returned {response.status_code}')
 
