@@ -6,6 +6,7 @@ from flask import redirect, request
 from werkzeug.utils import secure_filename
 
 import material_quote_engine
+import pulse_intelligence
 import quality_forms
 import ui_context_menu
 from material_quote_engine import QuoteMaterialAssignment, resolve_material_assignment
@@ -166,6 +167,7 @@ def create_app():
     app = create_base_app()
     material_quote_engine.register(app)
     quality_forms.register(app)
+    pulse_intelligence.register(app)
     upload_dir = Path(app.root_path) / "data" / "uploads" / "quote_drawings"
     upload_dir.mkdir(parents=True, exist_ok=True)
     with app.app_context():
