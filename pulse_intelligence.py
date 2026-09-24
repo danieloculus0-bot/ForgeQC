@@ -17,6 +17,7 @@ from forgeqc_app import (
     page,
 )
 from quality_forms import CorrectiveAction, DeviationRequest, NonconformanceRecord
+from quality_workflow import ppm_metrics, workflow_counts
 
 
 class MetricSnapshot(db.Model):
@@ -129,6 +130,8 @@ def compute_pulse_snapshot(days=30):
 
     wo_open = WorkOrder.query.filter(WorkOrder.status != 'Closed').count()
     wo_past_due = WorkOrder.query.filter(WorkOrder.status != 'Closed', WorkOrder.due_date != None, WorkOrder.due_date < today).count()
+    ppm = ppm_metrics(days)
+    workflow = workflow_counts()
 
     repeated_parts = Counter()
     for r in recent_date_filter(RMA.query, RMA.date_opened, cutoff).all():
@@ -149,6 +152,11 @@ def compute_pulse_snapshot(days=30):
     upsert_metric(today, 'morale_pressure', 'Morale Pressure Index', 'Morale / Capacity', morale_pressure, target=15, unit='score', severity=sev(morale_pressure, warn=18, bad=35))
     upsert_metric(today, 'work_orders_past_due', 'Past Due Work Orders', 'Delivery Risk', wo_past_due, target=0, unit='count', severity=sev(wo_past_due, warn=3, bad=8))
     upsert_metric(today, 'repeat_part_risk', 'Repeat Part Risk Families', 'Pattern Detection', repeat_count, target=0, unit='count', severity=sev(repeat_count, warn=1, bad=3))
+    ppm_note = f"PPM denominator: {ppm['units']} tracked operation units from FPY clocking during the last {days} days. Customer shipped-quantity denominator is not yet connected."
+    upsert_metric(today, 'ncr_ppm_recent', f'NCR PPM Last {days} Days', 'Internal Quality', ppm['ncr_ppm'], numerator=ppm['ncr_qty'], denominator=ppm['units'], target=0, unit='PPM', severity='Good' if ppm['ncr_ppm'] == 0 else 'Warning', notes=ppm_note)
+    upsert_metric(today, 'rma_ppm_recent', f'RMA PPM Last {days} Days', 'Customer Quality', ppm['rma_ppm'], numerator=ppm['rma_qty'], denominator=ppm['units'], target=0, unit='PPM', severity='Good' if ppm['rma_ppm'] == 0 else 'Warning', notes=ppm_note)
+    upsert_metric(today, 'quality_actions_overdue', 'Overdue Quality Actions', 'Expedite', workflow['overdue'], target=0, unit='count', severity=sev(workflow['overdue'], warn=1, bad=4))
+    upsert_metric(today, 'quality_actions_unassigned', 'Unassigned Quality Actions', 'Expedite', workflow['unassigned'], target=0, unit='count', severity=sev(workflow['unassigned'], warn=1, bad=4))
 
     if overdue_car:
         add_signal('Critical' if overdue_car >= 4 else 'Warning', 'Corrective actions are overdue', f'{overdue_car} corrective action(s) are past due.', 'Review overdue CARs first. Close completed actions or update due dates with owner accountability.', 'overdue_car', 'Corrective Action')
@@ -163,6 +171,10 @@ def compute_pulse_snapshot(days=30):
         add_signal('Critical' if morale_pressure >= 35 else 'Warning', 'Morale pressure is elevated', f'Morale pressure index is {morale_pressure}.', 'Compare overtime, absence, and staffing shortage periods against defect spikes before blaming operators.', 'morale_pressure', 'Morale / Capacity')
     if wo_open and wo_past_due / max(wo_open, 1) >= 0.25:
         add_signal('Warning', 'Past due work order load is high', f'{wo_past_due} of {wo_open} open work orders are past due.', 'Check material shortages, overcapacity departments, and quality hold impact.', 'work_orders_past_due', 'Delivery Risk')
+    if workflow['overdue']:
+        add_signal('Critical' if workflow['overdue'] >= 4 else 'Warning', 'Quality actions are overdue', f"{workflow['overdue']} NCR/RMA/deviation/CAR workflow item(s) are past due.", 'Open Quality Expedite and update ownership, next action, due date, or closure evidence.', 'quality_actions_overdue', 'Expedite')
+    if workflow['unassigned']:
+        add_signal('Warning', 'Quality actions are unassigned', f"{workflow['unassigned']} open quality workflow item(s) do not have an owner.", 'Assign an accountable owner and next action in Quality Expedite.', 'quality_actions_unassigned', 'Expedite')
 
     if not QualitySignal.query.filter_by(is_active=True).count():
         add_signal('Good', 'No major quality pulse alarms', 'Current tracked indicators are inside the configured warning bands.', 'Keep collecting snapshots. The intelligence gets better as history builds.', 'quality_pulse', 'Pulse')
@@ -208,7 +220,8 @@ def svg_line(rows, width=360, height=120):
 
 def card(row, series_rows):
     badge = row.severity.lower()
-    return f"<div class='card pulse-card {badge}'><span>{h(row.category)}</span><b>{h(row.value)}{h(row.unit if row.unit == '%' else '')}</b><div class='muted'>{h(row.metric_name)}</div>{svg_line(series_rows, 320, 100)}</div>"
+    suffix = '%' if row.unit == '%' else (f' {row.unit}' if row.unit and row.unit != 'count' else '')
+    return f"<div class='card pulse-card {badge}'><span>{h(row.category)}</span><b>{h(row.value)}{h(suffix)}</b><div class='muted'>{h(row.metric_name)}</div>{svg_line(series_rows, 320, 100)}</div>"
 
 
 def signal_table():

@@ -9,6 +9,7 @@ import capa_assistant
 import material_quote_engine
 import pulse_intelligence
 import quality_forms
+import quality_workflow
 import ui_context_menu
 from material_quote_engine import QuoteMaterialAssignment, resolve_material_assignment
 from forgeqc_app import (
@@ -165,15 +166,19 @@ def create_bom_from_pdf(pdf_path, source_filename, source="Quoting Drawing", quo
 
 def create_app():
     ui_context_menu.install()
+    quality_workflow.install_ui()
     app = create_base_app()
     material_quote_engine.register(app)
     quality_forms.register(app)
+    quality_workflow.register(app)
     capa_assistant.register(app)
     pulse_intelligence.register(app)
     upload_dir = Path(app.root_path) / "data" / "uploads" / "quote_drawings"
     upload_dir.mkdir(parents=True, exist_ok=True)
     with app.app_context():
         db.create_all()
+        quality_workflow.backfill_workflows()
+        db.session.commit()
 
     @app.route("/quoting", methods=["GET", "POST"])
     def quoting_resources():

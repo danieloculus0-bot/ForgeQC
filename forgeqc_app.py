@@ -336,7 +336,7 @@ def create_app():
         if request.method == 'POST':
             c = get_or_create(Customer, request.form.get('customer')); d = get_or_create(Department, request.form.get('department')); rc = get_or_create(ReasonCode, request.form.get('reason'))
             r = RMA(rma_number=next_number(RMA,'rma_number','RMA'), date_opened=parse_date(request.form.get('date_opened')) or date.today(), order_number=request.form.get('order_number'), work_order_number=request.form.get('work_order_number'), customer_id=c.id if c else None, department_id=d.id if d else None, reason_code_id=rc.id if rc else None, part_number=request.form.get('part_number'), quantity_affected=as_int(request.form.get('quantity_affected')), defect_description=request.form.get('defect_description'), status=request.form.get('status') or 'Open')
-            db.session.add(r); log('RMA','Save',r.rma_number); db.session.commit(); return redirect('/rma')
+            db.session.add(r); db.session.flush(); from quality_workflow import after_quality_save; after_quality_save('RMA', r, 'Saved'); log('RMA','Save',r.rma_number); db.session.commit(); return redirect('/rma')
         form = """<section><form method='post' class='form'><label>Date<input type='date' name='date_opened'></label><label>Order<input name='order_number'></label><label>WO<input name='work_order_number'></label><label>Customer<input name='customer'></label><label>Department<input name='department'></label><label>Reason<input name='reason'></label><label>Part<input name='part_number'></label><label>Qty Affected<input name='quantity_affected' type='number'></label><label>Status<select name='status'><option>Open</option><option>Closed</option></select></label><label class='wide'>Defect<textarea name='defect_description'></textarea></label><button>Save RMA</button></form></section><br>"""
         rows = ''.join(f"<tr><td>{r.rma_number}</td><td>{r.date_opened}</td><td>{r.customer.name if r.customer else ''}</td><td>{r.part_number}</td><td>{r.quantity_affected}</td><td>{r.department.name if r.department else ''}</td><td>{r.reason_code.name if r.reason_code else ''}</td><td>{r.status}</td></tr>" for r in RMA.query.order_by(RMA.id.desc()).limit(500))
         return page('RMA', form + f"<form method='post' action='/rma/import'><button>Import Local RMA_Tracker.xlsx</button></form><br><table><tr><th>RMA</th><th>Date</th><th>Customer</th><th>Part</th><th>Qty</th><th>Dept</th><th>Reason</th><th>Status</th></tr>{rows}</table>")
@@ -351,9 +351,18 @@ def create_app():
                 opened, order, customer, department, _person, desc, reason = (list(vals) + [None] * 7)[:7]
                 if not any([opened, order, customer, department, desc, reason]): continue
                 c = get_or_create(Customer, customer); d = get_or_create(Department, department); rc = get_or_create(ReasonCode, reason)
-                db.session.add(RMA(rma_number=next_number(RMA,'rma_number','RMA'), date_opened=parse_date(opened), order_number=str(order) if order else None, customer_id=c.id if c else None, department_id=d.id if d else None, reason_code_id=rc.id if rc else None, defect_description=str(desc) if desc else None, status='Open'))
+                imported_rma = RMA(rma_number=next_number(RMA,'rma_number','RMA'), date_opened=parse_date(opened), order_number=str(order) if order else None, customer_id=c.id if c else None, department_id=d.id if d else None, reason_code_id=rc.id if rc else None, defect_description=str(desc) if desc else None, status='Open')
+                db.session.add(imported_rma); db.session.flush()
+                from quality_workflow import ensure_workflow
+                ensure_workflow('RMA', imported_rma)
                 imported += 1
-        log('RMA','Import',f'Imported {imported} rows from local workbook'); db.session.commit(); return redirect('/rma')
+        log('RMA','Import',f'Imported {imported} rows from local workbook'); db.session.commit()
+        try:
+            from pulse_intelligence import compute_pulse_snapshot
+            compute_pulse_snapshot(30)
+        except Exception:
+            pass
+        return redirect('/rma')
 
     @app.route('/morale', methods=['GET','POST'])
     def morale():
