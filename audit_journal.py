@@ -93,10 +93,7 @@ def record_event(
         }
         record["entry_hash"] = _hash_record(record)
         line = json.dumps(record, sort_keys=True, ensure_ascii=False)
-        with path.open("a", encoding="utf-8", newline="
-") as handle:
-            handle.write(line + "
-")
+        with path.open("a", encoding="utf-8", newline="\\n") as handle:\n            handle.write(line + "\\n")
             handle.flush()
             os.fsync(handle.fileno())
         return record
