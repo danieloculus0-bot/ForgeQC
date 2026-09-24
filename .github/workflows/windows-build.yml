@@ -1,0 +1,193 @@
+name: ForgeQC Windows Server Build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-server:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt
+
+      - name: Run isolated smoke test
+        run: python smoke_test.py
+
+      - name: Build standalone ForgeQC Server
+        run: python -m PyInstaller --noconfirm --clean --onefile --console --name ForgeQC_Server desktop.py
+
+      - name: Launch-test packaged server and web NCR reporter
+        shell: pwsh
+        run: |
+          $env:FORGEQC_HOST = "127.0.0.1"
+          $env:FORGEQC_PORT = "5080"
+          $env:FORGEQC_NO_BROWSER = "1"
+          $env:FORGEQC_DATA_DIR = Join-Path $env:RUNNER_TEMP "ForgeQCPackagedData"
+
+          $process = Start-Process -FilePath ".\dist\ForgeQC_Server.exe" -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 45; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:5080/health" -TimeoutSec 2
+                if ($health.app -eq "ForgeQC") { $ready = $true; break }
+              } catch {}
+            }
+            if (-not $ready) { throw "Packaged ForgeQC_Server.exe did not become healthy." }
+
+            $body = @{
+              reported_by = "Windows Package Test"
+              department = "Quality"
+              reason = "Dimensional"
+              part_number = "PKG-SMOKE"
+              revision = "A"
+              quantity_affected = "1"
+              source_location = "Package Test"
+              defect_description = "Packaged web NCR reporter validation."
+              containment_action = "Test quantity isolated."
+            }
+            $report = Invoke-WebRequest -Uri "http://127.0.0.1:5080/report/ncr" -Method POST -Body $body -UseBasicParsing -TimeoutSec 10
+            if ($report.StatusCode -ne 200) { throw "Packaged NCR reporter returned $($report.StatusCode)." }
+
+            $live = Invoke-RestMethod -Uri "http://127.0.0.1:5080/api/live/quality-summary" -TimeoutSec 5
+            if ($live.open_ncr -lt 1) { throw "Live quality feed did not show the submitted NCR." }
+
+            $health = Invoke-RestMethod -Uri "http://127.0.0.1:5080/health" -TimeoutSec 5
+            if (-not $health.audit_ok -or $health.audit_entries -lt 1) { throw "Packaged audit journal did not verify." }
+          }
+          finally {
+            if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+            Get-Process ForgeQC_Server -ErrorAction SilentlyContinue | Stop-Process -Force
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found." }
+          & $iscc ".\installer\ForgeQC.iss"
+
+      - name: Install-test and prove audit journal survives uninstall
+        shell: pwsh
+        run: |
+          $persistentRoot = Join-Path $env:PROGRAMDATA "ForgeQC"
+          if (Test-Path $persistentRoot) { Remove-Item $persistentRoot -Recurse -Force }
+
+          $setup = Get-ChildItem ".\dist-installer\ForgeQC_Server_Setup_*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Installer package was not created." }
+
+          $install = Start-Process -FilePath $setup.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)." }
+
+          $installedExe = Join-Path $env:ProgramFiles "ForgeQC Server\ForgeQC_Server.exe"
+          if (-not (Test-Path $installedExe)) { throw "Installed ForgeQC_Server.exe was not found." }
+
+          Remove-Item Env:FORGEQC_DATA_DIR -ErrorAction SilentlyContinue
+          $env:FORGEQC_HOST = "127.0.0.1"
+          $env:FORGEQC_PORT = "5080"
+          $env:FORGEQC_NO_BROWSER = "1"
+
+          Get-Process ForgeQC_Server -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 1
+          $process = Start-Process -FilePath $installedExe -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 45; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:5080/health" -TimeoutSec 2
+                if ($health.app -eq "ForgeQC") { $ready = $true; break }
+              } catch {}
+            }
+            if (-not $ready) { throw "Installed ForgeQC Server did not become healthy." }
+
+            $expectedRoot = [System.IO.Path]::GetFullPath((Join-Path $env:PROGRAMDATA "ForgeQC")).TrimEnd('\')
+            $actualRoot = [System.IO.Path]::GetFullPath([string]$health.data_root).TrimEnd('\')
+            if ($actualRoot -ne $expectedRoot) { throw "Installed server data root was '$actualRoot', expected '$expectedRoot'." }
+
+            Invoke-WebRequest -Uri "http://127.0.0.1:5080/report/ncr" -Method POST -Body @{
+              reported_by = "Installer Test"
+              department = "Quality"
+              reason = "Documentation"
+              part_number = "INSTALL-SMOKE"
+              quantity_affected = "1"
+              defect_description = "Installer persistence validation."
+              containment_action = "Test only."
+            } -UseBasicParsing -TimeoutSec 10 | Out-Null
+          }
+          finally {
+            if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+            Get-Process ForgeQC_Server -ErrorAction SilentlyContinue | Stop-Process -Force
+          }
+
+          $auditPath = Join-Path $persistentRoot "audit\audit_journal.jsonl"
+          $dbPath = Join-Path $persistentRoot "forgeqc.db"
+          if (-not (Test-Path $auditPath)) { throw "Audit journal was not created in ProgramData." }
+          if (-not (Test-Path $dbPath)) { throw "ForgeQC database was not created in ProgramData." }
+
+          $uninstaller = Join-Path $env:ProgramFiles "ForgeQC Server\unins000.exe"
+          if (-not (Test-Path $uninstaller)) { throw "Uninstaller was not registered." }
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstall.ExitCode)." }
+
+          if (-not (Test-Path $auditPath)) { throw "FAIL: uninstall removed the audit journal." }
+          if (-not (Test-Path $dbPath)) { throw "FAIL: uninstall removed the persistent database." }
+          Write-Host "PASS: audit journal and persistent database survived uninstall."
+
+      - name: Upload standalone Windows server
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForgeQC-Windows-Server
+          path: dist/ForgeQC_Server.exe
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForgeQC-Server-Installer
+          path: dist-installer/ForgeQC_Server_Setup_*.exe
+          if-no-files-found: error
+
+      - name: Publish installer release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v0.2.0
+        run: |
+          $setup = Get-ChildItem ".\dist-installer\ForgeQC_Server_Setup_0.2.0.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Release installer was not created." }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f $env:RELEASE_TAG $env:GITHUB_SHA
+          git push -f origin "refs/tags/$env:RELEASE_TAG"
+
+          gh release view $env:RELEASE_TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG $setup.FullName --clobber
+          } else {
+            gh release create $env:RELEASE_TAG $setup.FullName --title "ForgeQC Server 0.2.0" --notes "Central ForgeQC server with web NCR reporting, ERP report ingest, live quality feed, persistent hash-chained audit journal, and Windows installer." --latest
+          }

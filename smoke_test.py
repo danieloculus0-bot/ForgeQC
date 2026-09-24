@@ -1,4 +1,9 @@
+import os
 import sys
+import tempfile
+
+_SMOKE_DATA_DIR = tempfile.mkdtemp(prefix="forgeqc-smoke-")
+os.environ["FORGEQC_DATA_DIR"] = _SMOKE_DATA_DIR
 
 
 def check(condition, message):
@@ -38,6 +43,8 @@ def main():
             'five_why_analysis',
             'quality_workflow_item',
             'quality_workflow_activity',
+            'erp_import_batch',
+            'erp_shipment',
         }
         missing = required_tables - table_names
         check(not missing, f'Missing tables: {sorted(missing)}')
@@ -70,12 +77,25 @@ def main():
             '/ncr-dmr',
             '/ncr-dmr/<int:row_id>',
             '/corrective-actions',
+        '/report/ncr',
+        '/api/live/quality-summary',
+        '/health',
+        '/audit-journal',
+        '/erp-import',
+        '/api/erp/status',
             '/corrective-actions/<int:row_id>',
             '/expedite',
             '/expedite/<source_type>/<int:source_id>',
             '/expedite/<source_type>/<int:source_id>/note',
             '/expedite/ncr/<int:ncr_id>/create-car',
             '/expedite/snapshot',
+            '/report/ncr',
+            '/api/live/quality-summary',
+            '/health',
+            '/audit-journal',
+            '/erp-import',
+            '/erp-import/run',
+            '/api/erp/status',
         }
         missing_routes = required_routes - rules
         check(not missing_routes, f'Missing routes: {sorted(missing_routes)}')
@@ -135,6 +155,26 @@ def main():
     })
     check(response.status_code in (302, 303), f'/ncr-dmr POST returned {response.status_code}')
 
+    response = client.post('/report/ncr', data={
+        'reported_by': 'Smoke Reporter',
+        'work_order_number': '',
+        'department': 'Quality',
+        'reason': 'Dimensional',
+        'part_number': 'WEB-SMOKE-PART',
+        'revision': 'A',
+        'quantity_affected': '2',
+        'source_location': 'Final Inspection',
+        'defect_description': 'Web reporter smoke-test nonconformance.',
+        'containment_action': 'Segregated affected quantity.',
+        'notes': 'Smoke test only.',
+    })
+    check(response.status_code == 200, f'/report/ncr POST returned {response.status_code}')
+
+    remote_dashboard = client.get('/', environ_overrides={'REMOTE_ADDR': '10.20.30.40'})
+    check(remote_dashboard.status_code == 403, 'Remote network client was not blocked from the full ForgeQC UI')
+    remote_reporter = client.get('/report/ncr', environ_overrides={'REMOTE_ADDR': '10.20.30.40'})
+    check(remote_reporter.status_code == 200, 'Remote network client could not reach the NCR reporter')
+
     with app.app_context():
         from quality_forms import CorrectiveAction, NonconformanceRecord
         from quality_workflow import QualityWorkflowItem, create_car_from_ncr, ppm_metrics
@@ -150,7 +190,26 @@ def main():
         ppm = ppm_metrics(30)
         check('ncr_ppm' in ppm and 'rma_ppm' in ppm, 'PPM metrics are unavailable')
 
-    print('ForgeQC smoke test passed: imports, tables, routes, expedite workflow, KPI/PPM integration, CAPA assistant, and core pages are alive.')
+        from audit_journal import verify_journal
+        audit = verify_journal()
+        check(audit.get('ok') is True and audit.get('entries', 0) > 0, f'Audit journal did not verify: {audit}')
+
+        from erp_integration import ERPShipment, process_inbox
+        from runtime_paths import erp_inbox_dir
+        shipment_report = erp_inbox_dir() / 'shipment_smoke.csv'
+        shipment_report.write_text(
+            'Ship Date,Customer,Part Number,Work Order,Qty Shipped\n'
+            '2026-09-24,Smoke Customer,SMOKE-PART,WO-SMOKE,1000\n',
+            encoding='utf-8',
+        )
+        process_inbox()
+        db.session.commit()
+        check(ERPShipment.query.count() == 1, 'ERP shipment report did not import')
+        ppm = ppm_metrics(30)
+        check(ppm.get('denominator_source') == 'ERP shipped quantity', f'ERP shipped quantity did not become PPM denominator: {ppm}')
+        check(float(ppm.get('units') or 0) == 1000.0, f'Unexpected ERP PPM denominator: {ppm}')
+
+    print('ForgeQC smoke test passed: web NCR reporting, persistent audit journal, ERP ingest, live quality feed, expedite workflow, KPI/PPM integration, CAPA assistant, and core pages are alive.')
 
 
 if __name__ == '__main__':

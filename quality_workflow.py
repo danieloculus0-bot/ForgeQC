@@ -5,6 +5,7 @@ from html import escape
 
 from flask import redirect, request
 
+from audit_journal import model_snapshot, record_event
 import forgeqc_app
 from forgeqc_app import OperationClockSummary, RMA, db, log, page
 
@@ -189,12 +190,35 @@ def record_activity(item, activity_type, detail, actor=''):
     ))
     item.last_activity_at = now
     item.updated_at = now
+    try:
+        record_event(
+            'QUALITY_WORKFLOW',
+            activity_type,
+            entity_type=item.source_type,
+            entity_id=item.case_number,
+            actor=actor,
+            detail=str(detail or '').strip() or activity_type,
+            data={'workflow_id': item.id, 'source_id': item.source_id, 'status': item.workflow_status, 'next_action': item.next_action},
+        )
+    except Exception:
+        pass
 
 
 def after_quality_save(source_type, row, action='Saved'):
     item = ensure_workflow(source_type, row)
     record_activity(item, 'SOURCE UPDATE', f'{action}: {source_case_number(normalize_source(source_type), row)}')
     db.session.flush()
+    try:
+        record_event(
+            'QUALITY_RECORD',
+            action,
+            entity_type=normalize_source(source_type),
+            entity_id=source_case_number(normalize_source(source_type), row),
+            detail=f'{action} controlled quality record',
+            data=model_snapshot(row),
+        )
+    except Exception:
+        pass
     try:
         from pulse_intelligence import compute_pulse_snapshot
         compute_pulse_snapshot(30)
@@ -224,10 +248,23 @@ def ppm_metrics(days=30):
         OperationClockSummary.period_date != None,
         OperationClockSummary.period_date >= cutoff,
     ).all()
-    units = sum(
+    tracked_units = sum(
         (row.first_pass_good_qty or 0) + (row.rework_qty or 0) + (row.scrap_qty or 0)
         for row in clocks
     )
+    units = tracked_units
+    denominator_source = 'Tracked production output'
+    try:
+        from erp_integration import ERPShipment
+        shipped_units = db.session.query(db.func.sum(ERPShipment.quantity_shipped)).filter(
+            ERPShipment.ship_date != None,
+            ERPShipment.ship_date >= cutoff,
+        ).scalar() or 0
+        if shipped_units > 0:
+            units = float(shipped_units)
+            denominator_source = 'ERP shipped quantity'
+    except Exception:
+        pass
     ncr_rows = NonconformanceRecord.query.filter(
         NonconformanceRecord.date_opened != None,
         NonconformanceRecord.date_opened >= cutoff,
@@ -247,6 +284,8 @@ def ppm_metrics(days=30):
         'rma_qty': rma_qty,
         'ncr_ppm': ncr_ppm,
         'rma_ppm': rma_ppm,
+        'denominator_source': denominator_source,
+        'tracked_units': tracked_units,
     }
 
 

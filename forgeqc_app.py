@@ -6,6 +6,8 @@ from flask import Flask, redirect, render_template_string, request
 from flask_sqlalchemy import SQLAlchemy
 from openpyxl import load_workbook
 
+from runtime_paths import database_path, imports_dir
+
 
 db = SQLAlchemy()
 
@@ -205,6 +207,11 @@ def next_number(model, field, prefix):
 
 def log(area, action, detail=''):
     db.session.add(ActivityLog(area=area, action=action, detail=detail))
+    try:
+        from audit_journal import record_event
+        record_event('APPLICATION', action, entity_type=area, detail=detail)
+    except Exception:
+        pass
 
 
 def fpy(good, rework, scrap):
@@ -247,12 +254,8 @@ def recommend_mode(employees, skus, complexity, variability, cash, preference):
 
 def create_app():
     app = Flask(__name__)
-    root = Path(__file__).resolve().parent
-    data_dir = root / 'data'
-    imports_dir = data_dir / 'imports'
-    data_dir.mkdir(exist_ok=True)
-    imports_dir.mkdir(parents=True, exist_ok=True)
-    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{data_dir / 'forgeqc.db'}"
+    legacy_imports_dir = imports_dir()
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{database_path()}"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     db.init_app(app)
     with app.app_context():
@@ -343,7 +346,7 @@ def create_app():
 
     @app.route('/rma/import', methods=['POST'])
     def import_rma():
-        path = imports_dir / 'RMA_Tracker.xlsx'
+        path = legacy_imports_dir / 'RMA_Tracker.xlsx'
         if not path.exists(): log('RMA','Import failed','Local workbook not found'); db.session.commit(); return redirect('/rma')
         wb = load_workbook(path, data_only=True); imported = 0
         if 'RMA Log' in wb.sheetnames:
