@@ -12,7 +12,7 @@ def data_root() -> Path:
     if override:
         root = Path(override).expanduser().resolve()
     elif os.name == "nt":
-        base = Path(os.environ.get("PROGRAMDATA") or (Path.home() / "AppData" / "Local"))
+        base = Path(os.environ.get("PROGRAMDATA") or r"C:\ProgramData")
         root = base / APP_NAME
     else:
         root = Path(__file__).resolve().parent / "data"
