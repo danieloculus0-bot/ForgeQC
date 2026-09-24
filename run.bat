@@ -1,6 +1,7 @@
 @echo off
 setlocal
 cd /d %~dp0
+set FORGEQC_DATA_DIR=%CD%\data
 
 if not exist .venv (
   py -m venv .venv
