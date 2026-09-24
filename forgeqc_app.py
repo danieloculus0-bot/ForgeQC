@@ -346,7 +346,7 @@ def create_app():
 
     @app.route('/rma/import', methods=['POST'])
     def import_rma():
-        path = imports_dir / 'RMA_Tracker.xlsx'
+        path = legacy_imports_dir / 'RMA_Tracker.xlsx'
         if not path.exists(): log('RMA','Import failed','Local workbook not found'); db.session.commit(); return redirect('/rma')
         wb = load_workbook(path, data_only=True); imported = 0
         if 'RMA Log' in wb.sheetnames:
