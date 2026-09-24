@@ -4,6 +4,7 @@ from html import escape
 from flask import redirect, request
 
 import forgeqc_app
+from quality_workflow import after_quality_save, workflow_link
 from forgeqc_app import (
     Customer,
     Department,
@@ -197,6 +198,8 @@ def deviation_form(row):
     <div class='wide'><button>Save Deviation Request</button> <a class='btn' href='/deviations'>Back</a></div>
     </form></section>
     """
+    if getattr(row, 'id', None):
+        body += f"<div class='toolbar'>{workflow_link('DEVIATION', row.id, 'Open Expedite Workflow')}</div>"
     return page('Deviation Request', body)
 
 
@@ -248,6 +251,8 @@ def ncr_form(row):
     <div class='wide'><button>Save NCR / DMR</button> <a class='btn' href='/ncr-dmr'>Back</a></div>
     </form></section>
     """
+    if getattr(row, 'id', None):
+        body += f"<div class='toolbar'>{workflow_link('NCR', row.id, 'Open Expedite Workflow')}</div>"
     return page('NCR / DMR', body)
 
 
@@ -295,6 +300,8 @@ def capa_form(row):
     <div class='wide'><button>Save Corrective Action</button> <a class='btn' href='/corrective-actions'>Back</a></div>
     </form></section>
     """
+    if getattr(row, 'id', None):
+        body += f"<div class='toolbar'>{workflow_link('CAR', row.id, 'Open Expedite Workflow')}</div>"
     return page('Corrective Action', body)
 
 
@@ -334,7 +341,7 @@ def register(app):
         if request.method == 'POST':
             row = DeviationRequest(request_number=request.form.get('request_number') or next_form_number(DeviationRequest, 'request_number', 'DEV'))
             apply_deviation(row)
-            db.session.add(row); log('Deviation', 'Saved', row.request_number); db.session.commit()
+            db.session.add(row); db.session.flush(); after_quality_save('DEVIATION', row, 'Saved'); log('Deviation', 'Saved', row.request_number); db.session.commit()
             return redirect(f'/deviations/{row.id}')
         blank = DeviationRequest(request_number=next_form_number(DeviationRequest, 'request_number', 'DEV'))
         rows = ''.join(f"<tr><td><a href='/deviations/{r.id}'>{h(r.request_number)}</a></td><td>{h(r.status)}</td><td>{h(r.customer.name if r.customer else '')}</td><td>{h(r.part_number)}</td><td>{h(r.deviation_type)}</td><td>{h(r.risk_level)}</td></tr>" for r in DeviationRequest.query.order_by(DeviationRequest.id.desc()).limit(200))
@@ -344,7 +351,7 @@ def register(app):
     def deviation_detail(row_id):
         row = DeviationRequest.query.get_or_404(row_id)
         if request.method == 'POST':
-            apply_deviation(row); log('Deviation', 'Updated', row.request_number); db.session.commit(); return redirect(f'/deviations/{row.id}')
+            apply_deviation(row); after_quality_save('DEVIATION', row, 'Updated'); log('Deviation', 'Updated', row.request_number); db.session.commit(); return redirect(f'/deviations/{row.id}')
         return deviation_form(row)
 
     @app.route('/ncr-dmr', methods=['GET', 'POST'])
@@ -353,7 +360,7 @@ def register(app):
             prefix = 'DMR' if request.form.get('record_type') == 'DMR' else 'NCR'
             row = NonconformanceRecord(record_number=request.form.get('record_number') or next_form_number(NonconformanceRecord, 'record_number', prefix))
             apply_ncr(row)
-            db.session.add(row); log('NCR/DMR', 'Saved', row.record_number); db.session.commit()
+            db.session.add(row); db.session.flush(); after_quality_save('NCR', row, 'Saved'); log('NCR/DMR', 'Saved', row.record_number); db.session.commit()
             return redirect(f'/ncr-dmr/{row.id}')
         blank = NonconformanceRecord(record_number=next_form_number(NonconformanceRecord, 'record_number', 'NCR'))
         rows = ''.join(f"<tr><td><a href='/ncr-dmr/{r.id}'>{h(r.record_number)}</a></td><td>{h(r.record_type)}</td><td>{h(r.status)}</td><td>{h(r.department.name if r.department else '')}</td><td>{h(r.part_number)}</td><td>{h(r.disposition)}</td></tr>" for r in NonconformanceRecord.query.order_by(NonconformanceRecord.id.desc()).limit(200))
@@ -363,7 +370,7 @@ def register(app):
     def ncr_dmr_detail(row_id):
         row = NonconformanceRecord.query.get_or_404(row_id)
         if request.method == 'POST':
-            apply_ncr(row); log('NCR/DMR', 'Updated', row.record_number); db.session.commit(); return redirect(f'/ncr-dmr/{row.id}')
+            apply_ncr(row); after_quality_save('NCR', row, 'Updated'); log('NCR/DMR', 'Updated', row.record_number); db.session.commit(); return redirect(f'/ncr-dmr/{row.id}')
         return ncr_form(row)
 
     @app.route('/corrective-actions', methods=['GET', 'POST'])
@@ -371,7 +378,7 @@ def register(app):
         if request.method == 'POST':
             row = CorrectiveAction(car_number=request.form.get('car_number') or next_form_number(CorrectiveAction, 'car_number', 'CAR'))
             apply_capa(row)
-            db.session.add(row); log('CorrectiveAction', 'Saved', row.car_number); db.session.commit()
+            db.session.add(row); db.session.flush(); after_quality_save('CAR', row, 'Saved'); log('CorrectiveAction', 'Saved', row.car_number); db.session.commit()
             return redirect(f'/corrective-actions/{row.id}')
         blank = CorrectiveAction(car_number=next_form_number(CorrectiveAction, 'car_number', 'CAR'))
         rows = ''.join(f"<tr><td><a href='/corrective-actions/{r.id}'>{h(r.car_number)}</a></td><td>{h(r.status)}</td><td>{h(r.source_type)}</td><td>{h(r.owner)}</td><td>{h(r.due_date)}</td></tr>" for r in CorrectiveAction.query.order_by(CorrectiveAction.id.desc()).limit(200))
@@ -381,5 +388,5 @@ def register(app):
     def corrective_action_detail(row_id):
         row = CorrectiveAction.query.get_or_404(row_id)
         if request.method == 'POST':
-            apply_capa(row); log('CorrectiveAction', 'Updated', row.car_number); db.session.commit(); return redirect(f'/corrective-actions/{row.id}')
+            apply_capa(row); after_quality_save('CAR', row, 'Updated'); log('CorrectiveAction', 'Updated', row.car_number); db.session.commit(); return redirect(f'/corrective-actions/{row.id}')
         return capa_form(row)
