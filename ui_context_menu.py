@@ -13,6 +13,7 @@ CONTEXT_HTML = r"""
   <div class="ctx-title" id="ctx-title">ForgeQC</div>
   <a data-ctx="module" href="/">Dashboard</a>
   <a data-ctx="module" href="/quality-forms">Quality Forms</a>
+  <a data-ctx="module" href="/expedite">Quality Expedite</a>
   <a data-ctx="module" href="/deviations">Deviation Requests</a>
   <a data-ctx="module" href="/ncr-dmr">NCR / DMR</a>
   <a data-ctx="module" href="/corrective-actions">Corrective Actions</a>
@@ -30,6 +31,7 @@ CONTEXT_HTML = r"""
   const title = document.getElementById('ctx-title');
   const breadcrumb = document.getElementById('ctx-breadcrumb');
   function labelForPath(path){
+    if(path.startsWith('/expedite')) return 'Quality Expedite';
     if(path.startsWith('/deviations')) return 'Deviation Requests';
     if(path.startsWith('/ncr-dmr')) return 'NCR / DMR';
     if(path.startsWith('/corrective-actions')) return 'Corrective Actions';
@@ -49,7 +51,7 @@ CONTEXT_HTML = r"""
   function setRelated(path){
     const links = Array.from(menu.querySelectorAll('[data-ctx="module"]'));
     const show = new Set(['/', '/metrics']);
-    if(path.startsWith('/deviations') || path.startsWith('/ncr-dmr') || path.startsWith('/corrective-actions') || path === '/quality-forms') ['/quality-forms','/deviations','/ncr-dmr','/corrective-actions','/rma'].forEach(x=>show.add(x));
+    if(path.startsWith('/expedite') || path.startsWith('/deviations') || path.startsWith('/ncr-dmr') || path.startsWith('/corrective-actions') || path === '/quality-forms') ['/expedite','/quality-forms','/deviations','/ncr-dmr','/corrective-actions','/rma'].forEach(x=>show.add(x));
     else if(path.startsWith('/quoting') || path.startsWith('/bom') || path.startsWith('/quote-materials')) ['/quoting','/materials','/planning'].forEach(x=>show.add(x));
     else if(path.startsWith('/workorders') || path.startsWith('/planning')) ['/workorders','/planning','/materials','/clocking'].forEach(x=>show.add(x));
     else if(path.startsWith('/rma')) ['/rma','/quality-forms','/metrics','/workorders'].forEach(x=>show.add(x));
