@@ -70,7 +70,6 @@ def main():
             '/ncr-dmr',
             '/ncr-dmr/<int:row_id>',
             '/corrective-actions',
-        '/expedite',
             '/corrective-actions/<int:row_id>',
             '/expedite',
             '/expedite/<source_type>/<int:source_id>',
