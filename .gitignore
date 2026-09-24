@@ -29,3 +29,8 @@ forgeqc_app/data/uploads/*
 Thumbs.db
 .vscode/
 .idea/
+
+# Server runtime evidence and ERP drop/archive directories
+data/audit/*
+data/imports/erp_inbox/*
+data/imports/erp_archive/*

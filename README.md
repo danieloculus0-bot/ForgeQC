@@ -77,7 +77,7 @@ Expected `RMA Log` columns:
 - Defect Description
 - Reason Code
 
-The app creates `data/forgeqc.db` automatically on first run.
+Source-development launchers keep local runtime data under `data/`. The packaged Windows server stores persistent runtime data under `%PROGRAMDATA%\\ForgeQC`.
 
 ## Quality Expedite integration
 
@@ -145,4 +145,103 @@ No OpenAI API key is stored or required by ForgeQC.
 
 ForgeQC does not scrape a signed-in ChatGPT session or automatically read ChatGPT replies. Approved conclusions must be entered back into the controlled ForgeQC record by the user. This keeps the quality record authoritative and avoids pretending a browser session is an application API.
 
+## Central server + web NCR reporting
+
+ForgeQC supports a central Windows server deployment. The packaged host listens on port `5080` by default.
+
+The host machine opens the full ForgeQC desktop/admin UI locally:
+
+```text
+http://127.0.0.1:5080
+```
+
+Shop-floor devices use the lightweight NCR reporter:
+
+```text
+http://<forgeqc-server>:5080/report/ncr
+```
+
+A web submission creates the same controlled `NonconformanceRecord` used by the desktop/admin UI. It immediately creates/updates the Quality Expedite workflow and refreshes quality metrics. There is no shadow NCR database.
+
+Remote network clients are intentionally limited to the NCR reporter and health endpoint. The full ForgeQC quality/admin surface remains local to the host unless a future authenticated remote-access layer is added.
+
+### Live desktop quality state
+
+The full ForgeQC UI polls `/api/live/quality-summary` every five seconds. New NCRs submitted from phones, tablets, or other workstations therefore appear in the host quality state without restarting the application.
+
+The live endpoint includes:
+
+- open NCR count
+- open, overdue, and unassigned quality actions
+- NCR and RMA PPM
+- current PPM denominator source
+- audit journal sequence
+- recent NCR records
+
+## ERP custom-report integration
+
+ForgeQC has a persistent ERP inbox under:
+
+```text
+%PROGRAMDATA%\ForgeQC\imports\erp_inbox
+```
+
+Custom CSV, XLSX, or XLSM reports can be copied into that folder or uploaded through `/erp-import`.
+
+The server:
+
+1. SHA-256 hashes the source file.
+2. Refuses duplicate imports by source hash.
+3. Detects recognized Shipment or Work Order reports from normalized column names.
+4. Imports recognized rows.
+5. Moves the original source report into the persistent ERP archive.
+6. Journals the import result, source hash, row counts, and archive path.
+
+Recognized shipment reports provide the preferred customer-PPM denominator. If shipment data is unavailable, ForgeQC falls back to tracked production output and labels that denominator accordingly.
+
+The mapping layer intentionally accepts common header variants such as `Work Order`, `WO`, `Part Number`, `Qty Shipped`, and `Ship Date`. Additional JobBoss²/custom-export aliases can be added once the exact report headers are known.
+
+## Persistent audit journal
+
+ForgeQC maintains a separate append-only JSONL journal:
+
+```text
+%PROGRAMDATA%\ForgeQC\audit\audit_journal.jsonl
+```
+
+The journal covers:
+
+- web and desktop mutations
+- NCR/RMA/deviation/CAR record saves
+- Quality Expedite workflow changes and progress notes
+- CAR creation and linkage
+- ERP report upload/import activity
+- server start events
+- existing application actions routed through the ForgeQC activity logger
+
+Each entry contains a sequence number, UTC timestamp, event/action, entity reference, actor/request context, previous-entry hash, and its own SHA-256 hash. This creates a tamper-evident hash chain. ForgeQC exposes journal verification in the local `/audit-journal` page and `/health` status.
+
+The journal is not claimed to be physically undeletable by a Windows administrator. Instead, the installer deliberately places it outside the application directory and marks the entire persistent ForgeQC data tree `uninsneveruninstall`. Normal ForgeQC uninstall does not delete the database, ERP archive, uploaded evidence, or audit journal.
+
+The Windows CI install test explicitly verifies this behavior by creating journal/database state, uninstalling ForgeQC, and failing if either file is removed.
+
+## Windows server installer
+
+Build locally on Windows:
+
+```powershell
+.\build_installer.ps1
+```
+
+The build:
+
+- creates an isolated build environment
+- installs dependencies
+- runs the ForgeQC smoke test
+- packages `ForgeQC_Server.exe` with PyInstaller
+- creates an Inno Setup installer
+- opens Windows Firewall TCP 5080 on Domain/Private profiles for the NCR reporter
+- optionally starts ForgeQC at Windows user sign-in
+
+The packaged application contains Python and application dependencies. End users do not need a separate Python installation.
 

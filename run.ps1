@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -Path $PSScriptRoot
+$env:FORGEQC_DATA_DIR = Join-Path $PSScriptRoot 'data'
 
 if (-not (Test-Path '.venv')) {
     py -m venv .venv
