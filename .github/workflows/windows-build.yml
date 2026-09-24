@@ -75,6 +75,7 @@ jobs:
           }
           finally {
             if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+            Get-Process ForgeQC_Server -ErrorAction SilentlyContinue | Stop-Process -Force
           }
 
       - name: Install Inno Setup
@@ -108,6 +109,8 @@ jobs:
           $env:FORGEQC_PORT = "5080"
           $env:FORGEQC_NO_BROWSER = "1"
 
+          Get-Process ForgeQC_Server -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 1
           $process = Start-Process -FilePath $installedExe -PassThru
           try {
             $ready = $false
@@ -119,6 +122,10 @@ jobs:
               } catch {}
             }
             if (-not $ready) { throw "Installed ForgeQC Server did not become healthy." }
+
+            $expectedRoot = [System.IO.Path]::GetFullPath((Join-Path $env:PROGRAMDATA "ForgeQC")).TrimEnd('\')
+            $actualRoot = [System.IO.Path]::GetFullPath([string]$health.data_root).TrimEnd('\')
+            if ($actualRoot -ne $expectedRoot) { throw "Installed server data root was '$actualRoot', expected '$expectedRoot'." }
 
             Invoke-WebRequest -Uri "http://127.0.0.1:5080/report/ncr" -Method POST -Body @{
               reported_by = "Installer Test"
@@ -132,6 +139,7 @@ jobs:
           }
           finally {
             if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+            Get-Process ForgeQC_Server -ErrorAction SilentlyContinue | Stop-Process -Force
           }
 
           $auditPath = Join-Path $persistentRoot "audit\audit_journal.jsonl"
