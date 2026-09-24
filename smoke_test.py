@@ -36,6 +36,8 @@ def main():
             'metric_snapshot',
             'quality_signal',
             'five_why_analysis',
+            'quality_workflow_item',
+            'quality_workflow_activity',
         }
         missing = required_tables - table_names
         check(not missing, f'Missing tables: {sorted(missing)}')
@@ -68,7 +70,13 @@ def main():
             '/ncr-dmr',
             '/ncr-dmr/<int:row_id>',
             '/corrective-actions',
+        '/expedite',
             '/corrective-actions/<int:row_id>',
+            '/expedite',
+            '/expedite/<source_type>/<int:source_id>',
+            '/expedite/<source_type>/<int:source_id>/note',
+            '/expedite/ncr/<int:ncr_id>/create-car',
+            '/expedite/snapshot',
         }
         missing_routes = required_routes - rules
         check(not missing_routes, f'Missing routes: {sorted(missing_routes)}')
@@ -112,7 +120,38 @@ def main():
     })
     check(response.status_code in (302, 303), f'/five-whys POST returned {response.status_code}')
 
-    print('ForgeQC smoke test passed: imports, tables, routes, pulse intelligence, CAPA assistant, and core pages are alive.')
+
+    response = client.post('/ncr-dmr', data={
+        'record_number': 'NCR-SMOKE-0001',
+        'record_type': 'NCR',
+        'date_opened': '2026-09-24',
+        'status': 'Open',
+        'part_number': 'SMOKE-PART',
+        'quantity_affected': '6',
+        'defect_description': 'Smoke-test dimensional nonconformance used to verify workflow, KPI, PPM, and CAR integration.',
+        'containment_action': 'Hold affected product for verification.',
+        'disposition': 'Review Needed',
+        'disposition_owner': 'Quality',
+        'due_date': '2026-09-30',
+    })
+    check(response.status_code in (302, 303), f'/ncr-dmr POST returned {response.status_code}')
+
+    with app.app_context():
+        from quality_forms import CorrectiveAction, NonconformanceRecord
+        from quality_workflow import QualityWorkflowItem, create_car_from_ncr, ppm_metrics
+
+        ncr = NonconformanceRecord.query.filter_by(record_number='NCR-SMOKE-0001').first()
+        check(ncr is not None, 'Smoke NCR was not created')
+        workflow = QualityWorkflowItem.query.filter_by(source_type='NCR', source_id=ncr.id).first()
+        check(workflow is not None, 'NCR did not create an expedite workflow item')
+        car, _created = create_car_from_ncr(ncr, 'Smoke Test')
+        db.session.commit()
+        check(car is not None and car.ncr_dmr_id == ncr.id, 'NCR did not create/link a CAR')
+        check(CorrectiveAction.query.filter_by(ncr_dmr_id=ncr.id).count() == 1, 'CAR link is not unique for smoke NCR')
+        ppm = ppm_metrics(30)
+        check('ncr_ppm' in ppm and 'rma_ppm' in ppm, 'PPM metrics are unavailable')
+
+    print('ForgeQC smoke test passed: imports, tables, routes, expedite workflow, KPI/PPM integration, CAPA assistant, and core pages are alive.')
 
 
 if __name__ == '__main__':
