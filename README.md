@@ -245,3 +245,8 @@ The build:
 
 The packaged application contains Python and application dependencies. End users do not need a separate Python installation.
 
+## Repository audit note (2026-10-20)
+
+**Status: standalone quality/quoting workflow code with successful September 24 smoke and Windows-build jobs.** RMA, NCR/DMR, deviation/CAR ownership, progress and Quality Pulse appear in this repository, and quote/BOM/material features are separate from released ERP integration. The `components/source_snapshots/ForgeQC/` tree in Axiom Beta is a set of **copied source snapshots**, not evidence that changes to ForgeQC automatically propagate, that a single database exists, or that deployment data migrated. New cross-repo writes need explicit versioned adapter contracts and authoritative ownership.
+
+[Portfolio-wide audit](https://github.com/danieloculus0-bot/Axiom_Beta/blob/main/docs/PORTFOLIO_AUDIT_2026-10-20.md).
