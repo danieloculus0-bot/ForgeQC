@@ -1,6 +1,6 @@
 #define MyAppName "ForgeQC Server"
 #define MyAppVersion "0.2.0"
-#define MyAppPublisher "company / company"
+#define MyAppPublisher "Independent Project"
 #define MyAppExeName "ForgeQC_Server.exe"
 
 [Setup]
