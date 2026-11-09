@@ -87,7 +87,16 @@ CONTEXT_HTML = r"""
   }
   function hideMenu(){menu.classList.remove('open');menu.setAttribute('aria-hidden','true');}
   document.addEventListener('DOMContentLoaded', decorate);
-  document.addEventListener('contextmenu', function(e){e.preventDefault();showMenu(e);});
+  document.addEventListener('contextmenu', function(e){
+    // Keep native copy/paste, selection, links, and browser context actions.
+    if(e.defaultPrevented || e.shiftKey || window.getSelection()?.toString() ||
+       e.target.closest('input, textarea, select, [contenteditable], a, button, [role="textbox"]')) {
+      hideMenu();
+      return;
+    }
+    e.preventDefault();
+    showMenu(e);
+  });
   document.addEventListener('click', function(e){if(!menu.contains(e.target)) hideMenu();});
   document.addEventListener('keydown', function(e){if(e.key === 'Escape') hideMenu();});
 })();
