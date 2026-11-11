@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+from datetime import date, timedelta
 
 _SMOKE_DATA_DIR = tempfile.mkdtemp(prefix="forgeqc-smoke-")
 os.environ["FORGEQC_DATA_DIR"] = _SMOKE_DATA_DIR
@@ -197,9 +198,10 @@ def main():
         from erp_integration import ERPShipment, process_inbox
         from runtime_paths import erp_inbox_dir
         shipment_report = erp_inbox_dir() / 'shipment_smoke.csv'
+        shipment_date = (date.today() - timedelta(days=1)).isoformat()
         shipment_report.write_text(
             'Ship Date,Customer,Part Number,Work Order,Qty Shipped\n'
-            '2026-09-24,Smoke Customer,SMOKE-PART,WO-SMOKE,1000\n',
+            f'{shipment_date},Smoke Customer,SMOKE-PART,WO-SMOKE,1000\n',
             encoding='utf-8',
         )
         process_inbox()
