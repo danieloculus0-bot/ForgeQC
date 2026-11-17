@@ -35,3 +35,6 @@ jobs:
 
       - name: Run ForgeQC smoke test
         run: python -u smoke_test.py
+
+      - name: Verify audit journal corruption regressions
+        run: python -m unittest -v test_audit_journal_integrity
