@@ -48,18 +48,7 @@ def _safe_request_context():
 def _tail_state(path: Path):
     if not path.exists() or path.stat().st_size == 0:
         return 0, "GENESIS"
-    last = None
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            if line.strip():
-                last = line
-    if not last:
-        return 0, "GENESIS"
-    try:
-        record = json.loads(last)
-        return int(record.get("sequence", 0)), str(record.get("entry_hash") or "GENESIS")
-    except Exception:
-        return 0, "CORRUPT_TAIL"
+    # Never extend a journal whose chain is already damaged. A valid-looking\n    # final line does not establish integrity of earlier entries.\n    verified = verify_journal(path)\n    if not verified["ok"]:\n        raise ValueError(f"Audit journal integrity failure at line {verified.get('line', 'unknown')}: {verified['error']}")\n    return verified["entries"], verified["last_hash"]
 
 
 def record_event(
@@ -127,7 +116,7 @@ def verify_journal(path=None):
                 record = json.loads(line)
             except Exception as exc:
                 return {"ok": False, "entries": entries, "line": line_number, "error": f"Invalid JSON: {exc}", "path": str(path)}
-            claimed = record.get("entry_hash")
+            if record.get("sequence") != entries + 1:\n                return {"ok": False, "entries": entries, "line": line_number, "error": "Sequence mismatch", "path": str(path)}\n            claimed = record.get("entry_hash")
             stored_previous = record.get("previous_hash")
             if stored_previous != previous_hash:
                 return {"ok": False, "entries": entries, "line": line_number, "error": "Previous hash mismatch", "path": str(path)}
