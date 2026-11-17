@@ -48,7 +48,12 @@ def _safe_request_context():
 def _tail_state(path: Path):
     if not path.exists() or path.stat().st_size == 0:
         return 0, "GENESIS"
-    # Never extend a journal whose chain is already damaged. A valid-looking\n    # final line does not establish integrity of earlier entries.\n    verified = verify_journal(path)\n    if not verified["ok"]:\n        raise ValueError(f"Audit journal integrity failure at line {verified.get('line', 'unknown')}: {verified['error']}")\n    return verified["entries"], verified["last_hash"]
+    # Never extend a journal whose chain is already damaged. A valid-looking
+    # final line does not establish integrity of earlier entries.
+    verified = verify_journal(path)
+    if not verified["ok"]:
+        raise ValueError(f"Audit journal integrity failure at line {verified.get('line', 'unknown')}: {verified['error']}")
+    return verified["entries"], verified["last_hash"]
 
 
 def record_event(
@@ -82,8 +87,10 @@ def record_event(
         }
         record["entry_hash"] = _hash_record(record)
         line = json.dumps(record, sort_keys=True, ensure_ascii=False)
-        with path.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write(line + "\n")
+        with path.open("a", encoding="utf-8", newline="
+") as handle:
+            handle.write(line + "
+")
             handle.flush()
             os.fsync(handle.fileno())
         return record
@@ -116,7 +123,9 @@ def verify_journal(path=None):
                 record = json.loads(line)
             except Exception as exc:
                 return {"ok": False, "entries": entries, "line": line_number, "error": f"Invalid JSON: {exc}", "path": str(path)}
-            if record.get("sequence") != entries + 1:\n                return {"ok": False, "entries": entries, "line": line_number, "error": "Sequence mismatch", "path": str(path)}\n            claimed = record.get("entry_hash")
+            if record.get("sequence") != entries + 1:
+                return {"ok": False, "entries": entries, "line": line_number, "error": "Sequence mismatch", "path": str(path)}
+            claimed = record.get("entry_hash")
             stored_previous = record.get("previous_hash")
             if stored_previous != previous_hash:
                 return {"ok": False, "entries": entries, "line": line_number, "error": "Previous hash mismatch", "path": str(path)}
