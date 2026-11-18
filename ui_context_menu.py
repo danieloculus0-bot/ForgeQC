@@ -19,7 +19,9 @@ CONTEXT_HTML = r"""
   <a data-ctx="module" href="/corrective-actions">Corrective Actions</a>
   <a data-ctx="module" href="/quoting">Quoting Resources</a>
   <a data-ctx="module" href="/materials">Approved Materials</a>
+  <a data-ctx="module" href="/rma">RMA</a>
   <a data-ctx="module" href="/workorders">Work Orders</a>
+  <a data-ctx="module" href="/clocking">FPY Clocking</a>
   <a data-ctx="module" href="/planning">Planning / Purchasing</a>
   <a data-ctx="module" href="/metrics">Metrics</a>
   <div class="ctx-sep"></div>
