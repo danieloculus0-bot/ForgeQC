@@ -119,16 +119,12 @@ CONTEXT_HTML = r"""
       link.textContent = a.textContent;
       links.appendChild(link);
     });
-    if(path.startsWith('/quoting/') && /^\\/quoting\\/\\d+\\/?$/.test(path)){
-      const quoteId = path.split('/')[2];
-      [['BOM Review','/bom/'],['Material Assignments','/quote-materials/']].forEach(pair=>{
-        // BOM uses upload IDs, not quote IDs; only material assignment has a safe direct route.
-        if(pair[0] !== 'Material Assignments') return;
-        const link = document.createElement('a');
-        link.href = pair[1] + encodeURIComponent(quoteId);
-        link.textContent = pair[0];
-        links.appendChild(link);
-      });
+    const quoteMatch = /^([0-9]+)$/.exec(path.split('/')[2] || '');
+    if(path.startsWith('/quoting/') && quoteMatch && path.split('/').filter(Boolean).length === 2){
+      const link = document.createElement('a');
+      link.href = '/quote-materials/' + encodeURIComponent(quoteMatch[1]);
+      link.textContent = 'Material Assignments';
+      links.appendChild(link);
     }
     section.appendChild(links);
     main.insertBefore(section, main.firstChild);
