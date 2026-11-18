@@ -24,7 +24,9 @@ class RelatedNavigationTests(unittest.TestCase):
 
     def test_quote_material_link_is_scoped_to_numeric_quote_ids(self):
         self.assertIn("quote-materials/", self.source)
-        self.assertIn("encodeURIComponent(quoteId)", self.source)
+        self.assertIn("encodeURIComponent(quoteMatch[1])", self.source)
+        self.assertIn("const quoteMatch = /^([0-9]+)$/.exec", self.source)
+        self.assertIn("path.split('/').filter(Boolean).length === 2", self.source)
         self.assertIn("startsWith('/quoting/')", self.source)
 
 if __name__ == "__main__":
