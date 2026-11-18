@@ -29,5 +29,16 @@ class RelatedNavigationTests(unittest.TestCase):
         self.assertIn("path.split('/').filter(Boolean).length === 2", self.source)
         self.assertIn("startsWith('/quoting/')", self.source)
 
+    def test_all_related_navigation_targets_have_actual_menu_links(self):
+        import re
+        menu = self.source.split('CONTEXT_HTML = r"""', 1)[1].split('<script>', 1)[0]
+        targets = set(re.findall(r'href="(/[^"]*)"', menu))
+        self.assertIn('/rma', targets)
+        self.assertIn('/clocking', targets)
+        related = self.source.split('function setRelated(path)', 1)[1].split('function decorate()', 1)[0]
+        for target in ('/rma', '/clocking'):
+            self.assertIn(target, related)
+            self.assertIn(target, targets)
+
 if __name__ == "__main__":
     unittest.main()
