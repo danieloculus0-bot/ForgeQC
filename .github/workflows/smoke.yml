@@ -38,3 +38,6 @@ jobs:
 
       - name: Verify audit journal corruption regressions
         run: python -m unittest -v test_audit_journal_integrity
+
+      - name: Verify related navigation regressions
+        run: python -m unittest -v test_related_navigation
