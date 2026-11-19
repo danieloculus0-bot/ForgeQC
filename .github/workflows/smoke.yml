@@ -41,3 +41,6 @@ jobs:
 
       - name: Verify related navigation regressions
         run: python -m unittest -v test_related_navigation
+
+      - name: Verify integrity-gated audit summary workflow
+        run: python -m unittest -v test_audit_summary
